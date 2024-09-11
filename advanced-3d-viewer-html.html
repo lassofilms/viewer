@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor 3D Avanzado</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+            background-color: #f5f5f7;
+            color: #1d1d1f;
+        }
+        #scene-container {
+            width: 100vw;
+            height: 100vh;
+        }
+        #controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255,255,255,0.8);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            max-width: 300px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        #info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(255,255,255,0.8);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+        h3 {
+            margin-top: 0;
+            font-weight: 600;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        input[type="file"], select {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #d2d2d7;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        input[type="range"] {
+            width: 100%;
+            margin-bottom: 15px;
+        }
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+            margin-bottom: 15px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #0071e3;
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        button {
+            background-color: #0071e3;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        button:hover {
+            background-color: #0077ed;
+        }
+        #animation-controls {
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div id="scene-container"></div>
+    <div id="controls">
+        <h3>Controles</h3>
+        <div>
+            <label for="glb-upload">Cargar GLB:</label>
+            <input type="file" id="glb-upload" accept=".glb">
+        </div>
+        <div>
+            <label for="hdri-upload">Cargar HDRI:</label>
+            <input type="file" id="hdri-upload" accept=".hdr">
+        </div>
+        <div>
+            <label for="hdri-toggle">HDRI Activado:</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="hdri-toggle" checked>
+                <span class="slider"></span>
+            </label>
+        </div>
+        <div>
+            <label for="directional-light">Luz Direccional (0-10):</label>
+            <input type="range" id="directional-light" min="0" max="10" step="0.1" value="1">
+        </div>
+        <div>
+            <label for="ambient-light">Luz Ambiental (0-5):</label>
+            <input type="range" id="ambient-light" min="0" max="5" step="0.1" value="0.5">
+        </div>
+        <div>
+            <label for="bloom-effect">Efecto Bloom:</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="bloom-effect">
+                <span class="slider"></span>
+            </label>
+        </div>
+        <div>
+            <label for="ao-effect">Oclusión Ambiental:</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="ao-effect">
+                <span class="slider"></span>
+            </label>
+        </div>
+        <div>
+            <label for="tone-mapping">Tone Mapping:</label>
+            <select id="tone-mapping">
+                <option value="NoToneMapping">Sin Tone Mapping</option>
+                <option value="LinearToneMapping">Lineal</option>
+                <option value="ReinhardToneMapping">Reinhard</option>
+                <option value="CineonToneMapping">Cineon</option>
+                <option value="ACESFilmicToneMapping">ACES Filmic</option>
+            </select>
+        </div>
+        <div id="animation-controls">
+            <h4>Animaciones</h4>
+            <select id="animation-select"></select>
+            <button id="play-animation">Reproducir</button>
+            <button id="stop-animation">Detener</button>
+        </div>
+    </div>
+    <div id="info">
+        <p>GLB cargado: <span id="loaded-glb">Ninguno</span></p>
+        <p>HDRI cargado: <span id="loaded-hdri">Ninguno</span></p>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.1/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.1/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
+
+        let scene, camera, renderer, controls, composer;
+        let directionalLight, ambientLight;
+        let currentModel, currentHDRI;
+        let mixer, animations = [];
+        let bloomPass, aoPass;
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.getElementById('scene-container').appendChild(renderer.domElement);
+
+            camera.position.z = 5;
+            controls = new OrbitControls(camera, renderer.domElement);
+
+            directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 5, 5);
+            scene.add(directionalLight);
+
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            composer = new EffectComposer(renderer);
+            const renderPass = new RenderPass(scene, camera);
+            composer.addPass(renderPass);
+
+            bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+            bloomPass.enabled = false;
+            composer.addPass(bloomPass);
+
+            aoPass = new SSAOPass(scene, camera, window.innerWidth, window.innerHeight);
+            aoPass.enabled = false;
+            composer.addPass(aoPass);
+
+            window.addEventListener('resize', onWindowResize, false);
+
+            setupEventListeners();
+        }
+
+        function setupEventListeners() {
+            document.getElementById('glb-upload').addEventListener('change', loadGLB);
+            document.getElementById('hdri-upload').addEventListener('change', loadHDRI);
+            document.getElementById('hdri-toggle').addEventListener('change', toggleHDRI);
+            document.getElementById('directional-light').addEventListener('input', updateDirectionalLight);
+            document.getElementById('ambient-light').addEventListener('input', updateAmbientLight);
+            document.getElementById('bloom-effect').addEventListener('change', toggleBloom);
+            document.getElementById('ao-effect').addEventListener('change', toggleAO);
+            document.getElementById('tone-mapping').addEventListener('change', changeToneMapping);
+            document.getElementById('play-animation').addEventListener('click', playAnimation);
+            document.getElementById('stop-animation').addEventListener('click', stopAnimation);
+        }
+
+        function loadGLB(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const loader = new GLTFLoader();
+                    loader.parse(e.target.result, '', function(gltf) {
+                        if (currentModel) scene.remove(currentModel);
+                        currentModel = gltf.scene;
+                        scene.add(currentModel);
+                        document.getElementById('loaded-glb').textContent = file.name;
+                        
+                        // Manejar animaciones
+                        animations = gltf.animations;
+                        if (animations.length > 0) {
+                            mixer = new THREE.AnimationMixer(currentModel);
+                            updateAnimationSelect();
+                        }
+                    });
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        }
+
+        function updateAnimationSelect() {
+            const select = document.getElementById('animation-select');
+            select.innerHTML = '';
+            animations.forEach((animation, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = animation.name || `Animación ${index + 1}`;
+                select.appendChild(option);
+            });
+        }
+
+        function playAnimation() {
+            if (mixer && animations.length > 0) {
+                const selectedIndex = document.getElementById('animation-select').value;
+                const animation = animations[selectedIndex];
+                const action = mixer.clipAction(animation);
+                action.reset();
+                action.play();
+            }
+        }
+
+        function stopAnimation() {
+            if (mixer) {
+                mixer.stopAllAction();
+            }
+        }
+
+        function loadHDRI(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const loader = new RGBELoader();
+                    loader.load(e.target.result, function(texture) {
+                        texture.mapping = THREE.EquirectangularReflectionMapping;
+                        currentHDRI = texture;
+                        applyHDRI();
+                        document.getElementById('loaded-hdri').textContent = file.name;
+                    });
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function toggleHDRI(event) {
+            if (event.target.checked) {
+                applyHDRI();
+            } else {
+                scene.background = null;
+                scene.environment = null;
+            }
+        }
+
+        function applyHDRI() {
+            if (currentHDRI && document.getElementById('hdri-toggle').checked) {
+                scene.background = currentHDRI;
+                scene.environment = currentHDRI;
+            }
+        }
+
+        function updateDirectionalLight(event) {
+            directionalLight.intensity = parseFloat(event.target.value);
+        }
+
+        function updateAmbientLight(event) {
+            ambientLight.intensity = parseFloat(event.target.value);
+        }
+
+        function toggleBloom(event) {
+            bloomPass.enabled = event.target.checked;
+        }
+
+        function toggleAO(event) {
+            aoPass.enabled = event.target.checked;
+        }
+
+        function changeToneMapping(event) {
+            renderer.toneMapping = THREE[event.target.value];
+            renderer.toneMappingExposure = 1;
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (mixer) {
+                mixer.update(0.016); // Actualizar animaciones (asumiendo 60 FPS)
+            }
+            controls.update();
+            composer.render();
+        }
+
+        init();
+        animate();
+    </script>
+</body>
+</html>
